@@ -10,9 +10,11 @@ import json
 # Config Variables
 ###########################
 
-PRINTDATA = False
-LOGDATA = True
-LOGDIR = "logs"
+PRINTDATA = False           # whether to print movements to stdout or not
+LOGDATA = True              # whether to create csv files or not
+LOGDIR = "logs"             # relative path where csv files will be dropped
+COMPLETE_PATH_NAMES = False # switch between full path names or assigned numbers,
+                            #   numbers will be assigned using the ordering in mice.config starting at 0
 
 MQTT_ENABLE = True
 MQTT_HOST = "127.0.0.1"
@@ -55,8 +57,11 @@ for dev in inpDevices:
     dev = dev.rstrip()
     if len(dev) <=1:
         continue
-    miceId = dev.split('/')[-1]
-    mice[miceId] = open(dev, 'rb')
+    if COMPLETE_PATH_NAMES:
+        miceId = dev.split('/')[-1]
+        mice[miceId] = open(dev, 'rb')
+    else:
+        mice[str(len(mice))] = open(dev, 'rb')
 
 if len(mice) == 0:
     print("No devices found in mice.config")
@@ -88,16 +93,16 @@ class mqttThread(threading.Thread):
             for thread in threads:
                 data[thread.dev_name] = thread.getNewValues()
             for mouse in data:
-                dx = dy = 0
                 if len(data[mouse]) == 0: # skip when nothing available
                     if mouse in summed:
-                        del summed[mouse]
+                        del summed[mouse] # delete key to not send old data
                     continue
+                dx = dy = 0
                 for update in data[mouse]: # sum up all movements
                     dx += update[1]
                     dy += update[2]
                 # append to dict
-                summed[mouse] = {"from_ms": data[mouse][0][0], "to_ms": data[mouse][-1][0], "dx": dx, "dy": dy}
+                summed[mouse] = {"ms": data[mouse][-1][0], "dx": dx, "dy": dy}
 
             if len(summed) > 0: # only send an update when data is available
                 self.mqttcl.publish(MQTT_TOPIC, json.dumps(summed))
